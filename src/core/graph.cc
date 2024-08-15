@@ -139,7 +139,7 @@ void GraphObj::dataMalloc() {
   // =================================== 作业
   // ===================================
   for (auto tensor : tensors) {
-    size_t ptr = allocator.alloc(sizeof(tensor));
+    size_t ptr = allocator.alloc(1024);
     auto blob = make_ref<BlobObj>(runtime, (void*)ptr);
     tensor->setDataBlob(blob);
   }
