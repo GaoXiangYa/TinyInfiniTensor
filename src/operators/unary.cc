@@ -1,4 +1,5 @@
 #include "operators/unary.h"
+#include "core/data_type.h"
 #include "core/tensor.h"
 #include <algorithm>
 #include <optional>
@@ -72,7 +73,12 @@ vector<DataType> CastObj::inferDataType(const TensorVec &inputs) const {
   // REF: https://onnx.ai/onnx/operators/onnx__Cast.html#cast-21
   // =================================== 作业
   // ===================================
-  return {};
+  const auto A = inputs[0];
+  auto input_dim = A->getDims();
+  auto output_dim = input_dim;
+  auto rank = A->getRank();
+  vector<DataType> cast_datatype(rank, getOutputDataType());
+  return cast_datatype;
 }
 
 optional<vector<Shape>> CastObj::inferShape(const TensorVec &inputs) {
@@ -82,7 +88,8 @@ optional<vector<Shape>> CastObj::inferShape(const TensorVec &inputs) {
   // REF: https://onnx.ai/onnx/operators/onnx__Cast.html#cast-21
   // =================================== 作业
   // ===================================
-  return std::nullopt;
+  const auto A = inputs[0];
+  return std::make_optional<vector<Shape>>({A->getDims()});
 }
 
 std::string CastObj::toString() const {
