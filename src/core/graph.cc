@@ -1,12 +1,17 @@
 #include "core/graph.h"
 #include "core/blob.h"
+#include "core/op_type.h"
 #include "core/ref.h"
 #include "core/runtime.h"
+#include "core/tensor.h"
+#include "operators/matmul.h"
+#include "operators/transpose.h"
 #include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <numeric>
 #include <queue>
+#include <utility>
 
 namespace infini {
 
@@ -97,6 +102,94 @@ void GraphObj::optimize() {
   // 合并算子（例如，矩阵乘算子中含有属性transA、transB，如果其输入存在transpose，且对最后两个维度做交换，就可以将transpose融入到矩阵乘算子的属性中去）
   // =================================== 作业
   // ===================================
+  auto transpose_reverse = [](Shape permute1, Shape permute2) -> bool {
+    if (permute1.size() != permute2.size()) {
+      return false;
+    }
+    for (std::size_t i = 0; i < permute1.size(); ++i) {
+      if (permute2[permute1[i]] != i) {
+        return false;
+      }
+    }
+    return true;
+  };
+  auto IsSwapLastDim = [](Shape permute) -> bool {
+    auto size = permute.size();
+    return permute[size - 1] == size - 2 && permute[size - 2] == size - 1;
+  };
+  topo_sort();
+  for (auto ite = ops.begin(); ite != ops.end();) {
+    auto op = *ite;
+    bool should_erase = false;
+    if (op->getOpType() == OpType::Transpose) {
+      auto successors = op->getSuccessors();
+      if (successors.size() > 1)
+        continue;
+      auto succ_op = successors[0];
+      if (succ_op->getOpType() == OpType::Transpose) {
+        auto transpose_op = as<TransposeObj>(op);
+        auto transpose_succ_op =
+            as<TransposeObj>(succ_op);
+        if (transpose_reverse(transpose_op->getPermute(),
+                              transpose_succ_op->getPermute())) {
+          auto input = op->getInputs(0);
+          input->removeTarget(op);
+          auto output = succ_op->getOutput();
+          for (auto tgt : output->getTargets()) {
+            input->addTarget(tgt);
+            tgt->removePredecessors(succ_op);
+            if (auto source = input->getSource(); source != nullptr) {
+              tgt->addPredecessors(source);
+              source->removeSuccessors(op);
+              source->addSuccessors(tgt);
+            }
+            tgt->replaceInput(output, input);
+          }
+          removeTensor(op->getOutput());
+          removeTensor(output);
+          removeOperator(succ_op);
+          removeOperator(op);
+          should_erase = true;
+        }
+      }
+    } else if (op->getOpType() == OpType::MatMul) {
+      auto pre_op = op->getPredecessors()[0];
+      if (pre_op->getOpType() == OpType::Transpose) {
+        auto pre_output = pre_op->getOutput();
+        auto transpose_op = as<TransposeObj>(pre_op);
+        auto permute = transpose_op->getPermute();
+        if (IsSwapLastDim(permute)) {
+          auto matmul_op = as<MatmulObj>(op);
+          if (matmul_op->getInputs(0) == pre_output &&
+              !matmul_op->getTransA()) {
+            matmul_op->setTransA(true);
+            std::swap(permute[permute.size() - 1], permute[permute.size() - 2]);
+          }
+          if (matmul_op->getInputs(1) == pre_output &&
+              !matmul_op->getTransB()) {
+            matmul_op->setTransB(true);
+            std::swap(permute[permute.size() - 1], permute[permute.size() - 2]);
+          }
+          auto pre_input = pre_op->getInputs(0);
+          auto source = pre_input->getSource();
+          if (source != nullptr) {
+            source->removeSuccessors(pre_op);
+            source->addSuccessors(matmul_op);
+            op->addPredecessors(source);
+          }
+          pre_input->removeTarget(pre_op);
+          pre_input->addTarget(op);
+          op->removePredecessors(pre_op);
+          int idx = matmul_op->getInputs(0) == pre_output ? 0 : 1;
+          op->inputs[idx] = pre_input;
+          removeOperator(pre_op);
+          removeTensor(pre_output);
+          should_erase = true;
+        }
+      }
+    }
+    if (!should_erase) ite++;
+  }
 }
 
 Tensor GraphObj::getTensor(int fuid) const {
@@ -140,7 +233,7 @@ void GraphObj::dataMalloc() {
   // ===================================
   for (auto tensor : tensors) {
     size_t ptr = allocator.alloc(1024);
-    auto blob = make_ref<BlobObj>(runtime, (void*)ptr);
+    auto blob = make_ref<BlobObj>(runtime, (void *)ptr);
     tensor->setDataBlob(blob);
   }
   allocator.info();
