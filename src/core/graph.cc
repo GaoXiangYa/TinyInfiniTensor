@@ -106,7 +106,7 @@ void GraphObj::optimize() {
     if (permute1.size() != permute2.size()) {
       return false;
     }
-    for (std::size_t i = 0; i < permute1.size(); ++i) {
+    for (int i = 0; i < permute1.size(); ++i) {
       if (permute2[permute1[i]] != i) {
         return false;
       }
@@ -114,7 +114,7 @@ void GraphObj::optimize() {
     return true;
   };
   auto IsSwapLastDim = [](Shape permute) -> bool {
-    auto size = permute.size();
+    int size = permute.size();
     return permute[size - 1] == size - 2 && permute[size - 2] == size - 1;
   };
   topo_sort();
