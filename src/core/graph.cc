@@ -106,8 +106,9 @@ void GraphObj::optimize() {
     if (permute1.size() != permute2.size()) {
       return false;
     }
-    for (auto i = 0; i < permute1.size(); ++i) {
-      if (permute2[permute1[i]] != static_cast<int>(i)) {
+    int permute1_size = permute1.size();
+    for (int i = 0; i < permute1_size; ++i) {
+      if (permute2[permute1[i]] != i) {
         return false;
       }
     }
