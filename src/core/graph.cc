@@ -106,16 +106,16 @@ void GraphObj::optimize() {
     if (permute1.size() != permute2.size()) {
       return false;
     }
-    for (int i = 0; i < permute1.size(); ++i) {
-      if (permute2[permute1[i]] != i) {
+    for (auto i = 0; i < permute1.size(); ++i) {
+      if (permute2[permute1[i]] != static_cast<int>(i)) {
         return false;
       }
     }
     return true;
   };
   auto IsSwapLastDim = [](Shape permute) -> bool {
-    int size = permute.size();
-    return permute[size - 1] == size - 2 && permute[size - 2] == size - 1;
+    auto size = permute.size();
+    return permute[size - 1] == static_cast<int>(size - 2) && permute[size - 2] == static_cast<int>(size - 1);
   };
   topo_sort();
   for (auto ite = ops.begin(); ite != ops.end();) {
